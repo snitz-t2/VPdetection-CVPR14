@@ -23,9 +23,9 @@ output: 								       \
 #include <float.h>
 #include <time.h>
 #include <omp.h>
-#include "jirafa_lib.h"
-#include "ntuples_aux.h"
-#include "alignments.h"
+#include "lib/jirafa_lib.h"
+#include "lib/ntuples_aux.h"
+#include "lib/alignments.h"
 #include <mex.h>
 
 /** sqrt(2) */

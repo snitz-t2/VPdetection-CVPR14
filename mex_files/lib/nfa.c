@@ -30,6 +30,7 @@
 #include <math.h>
 #include "misc.h"
 #include "nfa.h"
+# define M_LN10         2.30258509299404568402  /* log_e 10 */
 
 /*----------------------------------------------------------------------------*/
 /** Computes the natural logarithm of the absolute value of

@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <sys/time.h>
+#include <time.h>
 
 /*----------------------------------------------------------------------------*/
 /** Uniform random number generator in [1,2147483562].
