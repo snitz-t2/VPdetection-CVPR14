@@ -1,0 +1,14 @@
+final_vp_*.png
+/horizon_line.png
+/lines.eps
+/lines.png
+/mex_files/alignments_fast.lib
+/mex_files/alignments_fast.mexw64
+/mex_files/alignments_slow.lib
+/mex_files/alignments_slow.mexw64
+/mex_files/lsd.lib
+/mex_files/lsd.mexw64
+/out.txt
+/straight.eps
+/twisted.eps
+/vps_raw.png
