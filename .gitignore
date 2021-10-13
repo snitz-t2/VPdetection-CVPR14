@@ -12,3 +12,6 @@ final_vp_*.png
 /straight.eps
 /twisted.eps
 /vps_raw.png
+*.pdb
+*.ilk
+*.exp
