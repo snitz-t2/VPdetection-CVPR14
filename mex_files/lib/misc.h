@@ -27,6 +27,11 @@
     @author rafael grompone von gioi (grompone@gmail.com)
  */
 /*----------------------------------------------------------------------------*/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef MISC_HEADER
 #define MISC_HEADER
 
@@ -73,3 +78,7 @@ double dist(double x1, double y1, double x2, double y2);
 
 #endif /* !MISC_HEADER */
 /*----------------------------------------------------------------------------*/
+
+#ifdef __cplusplus
+}
+#endif

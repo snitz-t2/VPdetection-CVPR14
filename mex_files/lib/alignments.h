@@ -1,3 +1,8 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #ifndef ALIGNMENTS_HEADER
 #define ALIGNMENTS_HEADER
 
@@ -94,3 +99,8 @@ void free_alignment_list(alignments_list *a);
 
 
 #endif /* !ALIGNMENTS_HEADER */
+
+
+#ifdef __cplusplus
+}
+#endif
