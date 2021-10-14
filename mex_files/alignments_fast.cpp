@@ -27,7 +27,13 @@ output:                                                                        \
 #include "lib/jirafa_lib.h"
 #include "lib/ntuples_aux.h"
 #include "lib/alignments.h"
+
+#ifndef pybind11_project
 #include <mex.h>
+#else
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#endif // !pybind11_project
 
 /** sqrt(2) */
 #define SQRT2    1.414213562373
@@ -279,6 +285,8 @@ int main(int argc, char ** argv)
   return 0;
 }
 
+
+#ifndef pybind11_project
 /*----------------------------------------------------------------------------*/
 /*                                    Matlab interface                        */
 /*----------------------------------------------------------------------------*/
@@ -601,6 +609,269 @@ void mexFunction(int nlhs, mxArray *plhs[],
   */
 }
 /*----------------------------------------------------------------------------*/
+#else
+namespace py = pybind11;
+
+/*------------------- Numpy envelop Function for `detect_alignments`, based on the MATLAB envelop above ----------------------------*/
+py::array_t<double> detect_alignments_fast(py::array_t<double, py::array::c_style | py::array::forcecast> points_in,                 /* input_points | Input points (Nx2 matrix).            */
+                                           py::array_t<double, py::array::c_style | py::array::forcecast> candidate_points_in,       /* candidate_points | Candidate endpoints (Nx2 matrix). */
+                                           double xsize = 512,                                                                       /* xsize | 512 | X axis domain size.                    */
+                                           double ysize = 512,                                                                       /* ysize | 512 | Y axis domain size.                    */
+                                           double epsilon = 10,                                                                      /* epsilon | 10 | Detection threshold, (max. NFA).      */
+                                           double min_width = 1,                                                                     /* min_width | 1 | Minimal alignment width tested.      */
+                                           double locality = 10,                                                                     /* locality | 10 | Size factor of locality.             */
+                                           double min_k = 5,                                                                         /* min_k | 5 | Minimum number of points in alignment.   */
+                                           double length_ratio = 25)                                                                 /* length_ratio | 25 |  Min ratio b/w length and width. */
+{
+    /* handle input */
+    py::buffer_info points_buffer = points_in.request();
+    if (points_buffer.ndim != 2 || points_in.shape(1) != 2)
+        throw std::runtime_error("Input (points) must be an Nx2 array");
+
+    py::buffer_info candidate_points_buffer = candidate_points_in.request();
+    if (candidate_points_buffer.ndim != 2 || candidate_points_in.shape(1) != 2)
+        throw std::runtime_error("Input (candidate points) must be an Nx2 array");
+
+    int X = points_in.shape(1);               /* number of columns (should be 2) */
+    int N = points_in.shape(0);               /* number of  points */
+    int NCP = candidate_points_in.shape(0);   /* number of candidate ponits (should be the same as points) */
+
+
+    /* input points of size 2*N, buffer is ordered by rows, e.g. first two elemets are the first row etc... */
+    double* input_points = static_cast<double*>(points_buffer.ptr);
+    double* input_candidate_points = static_cast<double*>(candidate_points_buffer.ptr);
 
 
 
+
+    /* initiate multiprocessing*/
+    omp_set_num_threads(256);
+    
+    /* initiate alignements list */
+    struct point_alignment align, best_align;
+    alignments_list* all_alignments = (alignments_list*)calloc(sizeof(alignments_list), 1);
+
+
+    all_alignments->array = (struct point_alignment*)realloc(all_alignments->array, (all_alignments->capacity = 4) * sizeof(struct point_alignment));
+
+
+    ntuple_list points;
+    ntuple_list candidate_points;
+
+
+    double x, y, xc, yc, dx, dy, theta, lateral_dist, long_dist, fwd_dist;
+    double width;
+    unsigned int i, j, l, n;
+    int num_test = 0;
+    double logNT;
+    int* cells;
+    FILE* eps;
+
+    time_t timer;
+
+    /* read input */
+    points = new_ntuple_list(2);
+    for (i = 0; i < N; i++) {
+        if (points->size >= points->max_size) enlarge_ntuple_list(points);
+        points->values[points->size * points->dim + 0] = input_points[i * X];
+        points->values[points->size * points->dim + 1] = input_points[i * X + 1];
+        points->size++;
+    }
+
+    candidate_points = new_ntuple_list(2);
+    for (i = 0; i < NCP; i++) {
+        if (candidate_points->size >= candidate_points->max_size) enlarge_ntuple_list(candidate_points);
+        candidate_points->values[candidate_points->size * candidate_points->dim + 0] = input_candidate_points[i * X];
+        candidate_points->values[candidate_points->size * candidate_points->dim + 1] = input_candidate_points[i * X + 1];
+        candidate_points->size++;
+    }
+
+
+
+
+    n = points->size;
+
+    /* NUMBER OF TESTS */
+    num_test = n * (n - 1) / 2; /* widhts are ignored */
+
+
+    printf("points: %d\n", n);
+    printf("num_test: %d\n", num_test);
+    logNT = log10((double)num_test);
+    double log_epsilon = log10(epsilon);
+
+
+
+    /* initialize best_align */
+    best_align.nfa = -logNT;
+
+
+    int nmax = dist(xsize, ysize, 0.0, 0.0) / min_width;
+    cells = (int*)calloc((size_t)nmax, sizeof(int));
+    if (cells == NULL) error("not enough memory.");
+
+
+    /*---------------  detect alignments -------------------------------------- */
+    printf("detecting alignments...\n");
+    timer = time(NULL);
+
+    detect_alignments(logNT, log_epsilon, points, candidate_points, min_width, locality, length_ratio,
+        min_k, cells, all_alignments, &best_align);
+
+    printf("\nfinished detecting alignments...\n");
+    printf("time elapsed: %d seconds\n", (int)(time(NULL) - timer));
+    dprint(best_align.nfa);
+
+    /*--------------- end detect alignments------------------------------------ */
+
+
+
+    /* sort alignements */
+    qsort((*all_alignments).array, all_alignments->pos,
+        sizeof(struct point_alignment), compare_alignments);
+
+
+
+    /* --------------------------------------------------------------------------------- */
+    /* --------------------------------------------------------------------------------- */
+    /* 1-vs-1 exclusion principle: start a list of alignments with the
+       most significant one, then one by one check if they are masked */
+       /* IMPORTANT: all_alignments are ordered backwards */
+       /* create the list */
+
+    printf("applying exclusion principle on resulting %d alingments...\n", all_alignments->pos);
+    timer = time(NULL);
+
+    alignments_list* f1v1_alignments = (alignments_list*)calloc(sizeof(alignments_list), 1);
+
+    /* it is possible that there are no alignments*/
+    if (all_alignments->pos != 0) {
+
+        /* append the first alignment to this list */
+        append_alignment(f1v1_alignments, &(all_alignments->array[all_alignments->pos - 1]));
+
+
+
+        int ismasked;
+        signed int ai;
+
+        for (ai = (*all_alignments).pos - 2; ai >= 1; ai--) {
+            struct point_alignment temp_alignment_b = all_alignments->array[ai];
+
+            ismasked = 0;
+
+            for (j = 0; j < (*f1v1_alignments).pos; j++) {
+                struct point_alignment temp_alignment_a = f1v1_alignments->array[j];
+
+                /* check if alignments from final list mask alignment in
+                   all-alignments list */
+
+                double im = is_masked_cases(points, &temp_alignment_a,
+                    &temp_alignment_b, logNT);
+
+                if (im <= log_epsilon) ismasked = 1;
+            }
+
+            if (ismasked == 0) {		/* not masked, add to final list */
+                append_alignment(f1v1_alignments, &temp_alignment_b);
+            }
+        }
+
+        printf("number of final alignments after 1vs1: %d \n", (int)(*f1v1_alignments).pos);
+    }
+
+    printf("\nfinished exclusion principle...\n");
+    printf("time elapsed: %d seconds\n", (int)(time(NULL) - timer));
+
+    /* END of 1 vs 1 exclusion principle */
+    /* ------------------------------------------------------------------------ */
+
+    /*----------------- MATLAB:  prepare output variables --------------------*/
+
+    /* output variables definitions */
+    int lw = 6;                                                               /* x1,y1,x2,y2,width,-log10(NFA) */
+    int n_out = (*f1v1_alignments).pos;
+    auto detections = py::array_t<double>({ n_out, lw });
+
+
+
+    /* Get a pointer to the data space in our newly allocated memory */
+    py::buffer_info detections_buffer = detections.request();
+    double* outArray = static_cast<double*>(detections_buffer.ptr);
+
+    //Copy matrix while multiplying each point by 2
+
+    int ii;
+    for (ii = (*f1v1_alignments).pos - 1; ii >= 0; ii--) { /*  hack to do
+                                                      backward loop */
+
+        i = ii;
+
+        struct point_alignment temp_alignment = f1v1_alignments->array[i];
+
+        outArray[ii * lw + 0] = temp_alignment.x1;
+        outArray[ii * lw + 1] = temp_alignment.y1;
+        outArray[ii * lw + 2] = temp_alignment.x2;
+        outArray[ii * lw + 3] = temp_alignment.y2;
+        outArray[ii * lw + 4] = temp_alignment.width;
+        outArray[ii * lw + 5] = temp_alignment.nfa;
+
+    }
+
+    /*--------------------------- end -------------------------------*/
+
+
+    /* free memory */
+
+    if (best_align.l != NULL) free_ntuple_list(best_align.l);
+    free_alignment_list(all_alignments);
+    free_alignment_list(f1v1_alignments);
+
+    free(cells);
+    free_ntuple_list(points);
+
+    /*
+      free( (void*) cells );
+      free_ntuple_list(points);
+    */
+
+
+    return detections;
+}
+
+std::string detect_alignments_fast_doc = R""""(ALIGNMENTS_FAST Point alignment detection with endpoint candidates.
+                                              -----------------------------------------------------------------------------------------------------------
+                                              detections = ALIGNMENTS_SLOW(input_points, xsize, ysize, epsilon, min_width, locality, min_k, length_ratio)
+                                              author: jose lezama / rafael grompone von gioi
+                                              version : 8.1 (2014.08.12)
+                                              year : 2014
+                                              desc : Python (Numpy) interface for aligned point detector v8(with candidate points)
+                                              input :
+                                                 -reqired  : points_in | Input points (Nx2 numpy array).
+                                                 -reqired  : candidate_points_in | Candidate endpoints (Nx2 numpy array).
+                                                 -optional : xsize | 512 | X axis domain size.
+                                                 -optional : ysize | 512 | Y axis domain size.
+                                                 -optional : epsilon | 10 | Detection threshold, (max.NFA).
+                                                 -optional : min_width | 1 | Minimal alignment width tested.
+                                                 -optional : locality | 10 | Size factor of locality.
+                                                 -optional : min_k | 5 | Minimum number of points in alignment.
+                                                 -optional : length_ratio | 25 | Min ratio b / w length and width.
+                                              output :
+                                                 -required : detections | Noutx6 alignments matrix with : x1, x2, y1, y2, width, nfa)"""";
+
+PYBIND11_MODULE(pyalignments_fast, handle) {
+    handle.doc() = "This python module wraps the fast implementation of the line segments alignment algorithm, which is the core of the vanishing point detection algorithm.";
+    handle.def("detect_alignments_fast",
+               &detect_alignments_fast,
+               detect_alignments_fast_doc.c_str(),
+               py::arg("points_in"),
+               py::arg("candidate_points_in"),
+               py::arg("xsize") = 512,
+               py::arg("ysize") = 512,
+               py::arg("epsilon") = 10,
+               py::arg("min_width") = 1,
+               py::arg("locality") = 10,
+               py::arg("min_k") = 5,
+               py::arg("length_ratio") = 25);
+}
+#endif

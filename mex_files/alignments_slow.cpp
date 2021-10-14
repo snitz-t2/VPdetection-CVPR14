@@ -764,7 +764,7 @@ py::array_t<double> detect_alignments_slow(py::array_t<double, py::array::c_styl
     /*----------------- prepare output variables --------------------*/
 
   /* output variables definitions */
-    int lw = 6;                                                     /* x1,y1,x2,y2,width,-log10(NFA)*/
+    int lw = 6;                                                     /* x1,y1,x2,y2,width,-log10(NFA) */
     int n_out = (*f1v1_alignments).pos;
     auto detections = py::array_t<double>({ n_out, lw });
 
@@ -783,7 +783,6 @@ py::array_t<double> detect_alignments_slow(py::array_t<double, py::array::c_styl
         i = ii;
 
         struct point_alignment temp_alignment = f1v1_alignments->array[i];
-        /* struct point_alignment temp_alignment = f1v1_alignments->array[ii]; */
 
         outArray[ii * lw + 0] = temp_alignment.x1;
         outArray[ii * lw + 1] = temp_alignment.y1;
@@ -820,22 +819,22 @@ std::string detect_alignments_slow_doc = R""""(ALIGNMENTS_SLOW Point alignment d
                                               author: jose lezama / rafael grompone von gioi
                                               version : 8.1 (2014.08.12)
                                               year : 2014
-                                              desc : Python (Numpy) interface for aligned point detector v8(with candidate points)
+                                              desc : Python (Numpy) interface for aligned point detector v8
                                               input :
-                                                 -reqired  : points_in | Input points(Nx2 matrix).
-                                                 -optional : min_k | 5 | Minimum number of points in alignment.
+                                                 -reqired  : points_in | Input points (Nx2 numpy array).
                                                  -optional : xsize | 512 | X axis domain size.
                                                  -optional : ysize | 512 | Y axis domain size.
                                                  -optional : epsilon | 10 | Detection threshold, (max.NFA).
                                                  -optional : min_width | 1 | Minimal alignment width tested.
                                                  -optional : locality | 10 | Size factor of locality.
+                                                 -optional : min_k | 5 | Minimum number of points in alignment.
                                                  -optional : length_ratio | 25 | Min ratio b / w length and width.
                                               output :
-                                                 -required : detections | 6xNout alignments matrix with : x1, x2, y1, y2, width, nfa)"""";
+                                                 -required : detections | Noutx6 alignments matrix with : x1, x2, y1, y2, width, nfa)"""";
 
 PYBIND11_MODULE(pyalignments_slow, handle) {
     handle.doc() = "This python module wraps the slow implementation of the line segments alignment algorithm, which is the core of the vanishing point detection algorithm.";
-    handle.def("detect_alignments",
+    handle.def("detect_alignments_slow",
                &detect_alignments_slow,
                detect_alignments_slow_doc.c_str(),
                py::arg("points_in"),
