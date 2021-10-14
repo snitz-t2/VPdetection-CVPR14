@@ -627,7 +627,7 @@ py::array_t<double> detect_alignments_slow(py::array_t<double, py::array::c_styl
     int X = points_in.shape(1);  /* number of columns (should be 2) */
     int N = points_in.shape(0);  /* number of  points */
 
-    /* input points of size 2*N first N coordinates are x coordinates, then N coordinates are y coordinates */
+    /* input points of size 2*N, buffer is ordered by rows, e.g. first two elemets are the first row etc... */
     double* input_points = static_cast<double*>(points_buffer.ptr);
 
     
@@ -656,8 +656,8 @@ py::array_t<double> detect_alignments_slow(py::array_t<double, py::array::c_styl
     points = new_ntuple_list(2);
     for (i = 0; i < N; i++) {
         if (points->size >= points->max_size) enlarge_ntuple_list(points);
-        points->values[points->size * points->dim + 0] = input_points[i];
-        points->values[points->size * points->dim + 1] = input_points[N + i];
+        points->values[points->size * points->dim + 0] = input_points[X * i];
+        points->values[points->size * points->dim + 1] = input_points[X * i + 1];
         points->size++;
     }
 
