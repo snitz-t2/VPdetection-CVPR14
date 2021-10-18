@@ -857,7 +857,22 @@ std::string detect_alignments_fast_doc = R""""(ALIGNMENTS_FAST Point alignment d
                                                  -optional : min_k | 5 | Minimum number of points in alignment.
                                                  -optional : length_ratio | 25 | Min ratio b / w length and width.
                                               output :
-                                                 -required : detections | Noutx6 alignments matrix with : x1, x2, y1, y2, width, nfa)"""";
+                                                 -required : detections | Noutx6 alignments matrix with : x1, x2, y1, y2, width, nfa
+                                              -----------------------------------------------------------------------------------------------------------
+                                              
+                                              Number Of False Alarms
+                                              ----------------------
+                                              The value in the nfa output of this algorithm is actually -log10(NFA),
+                                              where NFA stand for `Number Of False Alarms`.
+                                              The value -log10(NFA) is equivalent but more intuitive than NFA:
+                                              - -1 corresponds to 10 mean false alarms
+                                              -  0 corresponds to 1 mean false alarm
+                                              -  1 corresponds to 0.1 mean false alarms
+                                              -  2 corresponds to 0.01 mean false alarms
+                                              -  ...
+                                              
+                                              Used this way, the bigger the value, better the detection,
+                                              and a logarithmic scale is used.)"""";
 
 PYBIND11_MODULE(pyalignments_fast, handle) {
     handle.doc() = "This python module wraps the fast implementation of the line segments alignment algorithm, which is the core of the vanishing point detection algorithm.";
